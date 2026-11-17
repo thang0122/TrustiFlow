@@ -1,0 +1,12 @@
+TRUSTIFLOW PHASE 2 — ROOT CHECK
+
+Sau khi tải lên GitHub, cấp đầu tiên phải có:
+- package.json
+- package-lock.json
+- src/
+- supabase/
+- proxy.ts
+- next.config.ts
+
+Mở src/ phải thấy app/ và components/. Mở src/app/ phải thấy page.tsx và layout.tsx.
+Vercel Root Directory = ./ (repository root), KHÔNG phải src, docs hoặc thư mục con.

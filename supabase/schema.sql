@@ -1,0 +1,9 @@
+-- TrustiFlow database schema entry point.
+-- Do not run an older standalone schema from this file: it predates the Phase 2
+-- multi-tenant schema and would create conflicting table and role definitions.
+-- The canonical, versioned SQL is in supabase/migrations/.
+-- Apply in ascending filename order:
+-- 202611180001_initial_saas.sql
+-- 202611180002_phase2_completion.sql
+-- 202611180003_document_versions.sql
+-- 202611180004_membership_security_hardening.sql
