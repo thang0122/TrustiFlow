@@ -1,25 +1,27 @@
-# TrustiFlow Phase 2 — source implementation status
+# TrustiFlow Giai đoạn 2 — tình trạng mã nguồn
 
-## Đã triển khai trong mã nguồn
-- Supabase browser/server clients và `proxy.ts` cho làm mới phiên, bảo vệ route (Next.js 16).
-- Đăng ký, đăng nhập, đăng xuất, callback xác nhận email, quên mật khẩu và đặt mật khẩu mới.
-- API hồ sơ tài khoản, tự tạo workspace đầu tiên, tạo/chuyển workspace.
-- Multi-tenant schema; vai trò Owner/Admin/Member/Reviewer; RLS; bảo vệ Owner; lời mời 7 ngày chỉ được chấp nhận khi email đăng nhập khớp.
-- Kho Supabase Storage private, giới hạn 20 MB/tệp và MIME allowlist; tải xuống bằng signed URL; lưu phiên bản tài liệu và xóa tài liệu cùng bản lưu.
-- Nhật ký hoạt động workspace và UI quản lý thành viên được thiết kế lại.
-- Hướng dẫn Supabase → GitHub → Vercel và bốn migration SQL theo thứ tự.
+## Thành phần đã có trong gói mã nguồn
 
-## Chưa thể xác nhận hoàn tất trên production
-- Chưa chạy migrations trên Supabase của người dùng hoặc kiểm tra dữ liệu live.
-- Chưa có commit GitHub/redeploy Vercel do chưa được kết nối quyền truy cập GitHub/Vercel.
-- Chưa kiểm thử end-to-end email, reset mật khẩu, session, lời mời, RLS giữa hai workspace và Storage bằng hai tài khoản riêng.
-- `npm run build` chưa chạy thành công trong môi trường đóng gói: `next` chưa được cài trong `node_modules` và lệnh `npm ci` trước đó bị timeout.
-- Màn hình sản phẩm, RFQ, báo giá và DEALSHIELD còn một phần dữ liệu demo/local state; workflow CRUD đầy đủ và Gemini/OCR thật thuộc giai đoạn tiếp theo.
+- Supabase browser/server clients, Next.js Proxy và các API route sử dụng phiên đăng nhập.
+- Supabase Auth: đăng ký, xác nhận email, đăng nhập, đăng xuất, quên mật khẩu, cập nhật mật khẩu và khôi phục phiên.
+- Hồ sơ người dùng, tự tạo workspace đầu tiên, tạo/chuyển workspace.
+- Vai trò Owner/Admin/Member/Reviewer, quản lý thành viên, lời mời bằng link và kiểm soát quyền bằng RLS.
+- PostgreSQL gồm dữ liệu người dùng, workspace, đối tác, sản phẩm, giao dịch, tài liệu, phiên bản, extraction, báo giá, rà soát, sai lệch, audit, lời mời và thông báo.
+- CRUD hồ sơ sản phẩm; lưu giao dịch RFQ; lưu báo giá vào workspace.
+- Supabase Storage private, kiểm tra MIME/dung lượng, signed URL, phiên bản và xóa tài liệu.
+- Nhật ký hoạt động, thông báo theo thành viên; menu tài khoản/cài đặt/đăng xuất và căn chỉnh thương hiệu.
+- Script SQL bootstrap/phục hồi độc lập tại `supabase/SETUP-PHASE2-PRODUCTION.sql`.
 
-## Kiểm tra tĩnh đã chạy
-- TypeScript/TSX transpile syntax diagnostics: 27 tệp, không có lỗi cú pháp.
-- Kiểm tra đường dẫn import tương đối và alias `@/`: không phát hiện import nội bộ bị thiếu.
-- CSS parse bằng PostCSS và JSON parse cho các tệp cấu hình: thành công.
-- ZIP integrity: thực hiện sau khi đóng gói.
+## Việc bắt buộc phải thực hiện và xác minh trên project thực tế
 
-Mã nguồn Phase 2 đã hoàn thiện phần nền tảng Auth/Workspace/Storage/Audit. Chỉ nghiệm thu production sau khi migrations, Vercel deploy, build và các bài test live đều qua.
+- Chạy script SQL trên Supabase và xác nhận các bảng, policy, trigger, bucket được tạo thành công.
+- Chạy `npm ci` và `npm run build` trên môi trường build có đầy đủ dependency.
+- Deploy commit mới lên Vercel, xác nhận deployment `Ready`.
+- Kiểm thử Auth, reset password, session, workspace/membership, lời mời, các vai trò, CRUD sản phẩm/giao dịch/báo giá, Storage và notifications.
+- Kiểm thử RLS bằng ít nhất hai tài khoản ở hai workspace khác nhau.
+
+## Phạm vi các giai đoạn sau
+
+AI/OCR, trích xuất RFQ tự động, phân tích tài liệu, tự động hóa báo giá/email và đối chiếu chứng từ DEALSHIELD thuộc Giai đoạn 3. Kiểm thử an ninh, reliability, backup/restore và kiểm thử đầu-cuối thuộc Giai đoạn 4. Onboarding, billing và vận hành thương mại thuộc Giai đoạn 5.
+
+Không thể xác nhận Giai đoạn 2 trên Production chỉ từ việc tạo ZIP. Chỉ nghiệm thu sau khi SQL, build, deploy và kiểm thử live đều đạt.

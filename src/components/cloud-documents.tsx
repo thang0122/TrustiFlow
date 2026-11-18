@@ -115,6 +115,10 @@ export function CloudDocuments({ workspaceId, language = 'vi' }: { workspaceId: 
           throw new Error(insertError.message);
         }
       }
+      await fetch('/api/activity', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceId, title: `Đã tải lên ${files.length} tài liệu`, type: 'document', detail: Array.from(files).map(file => file.name).join(', ') })
+      });
       await load();
       setMessage(vi ? 'Đã tải tài liệu lên kho riêng tư của workspace.' : 'Documents uploaded to the private workspace library.');
     } catch (error) {

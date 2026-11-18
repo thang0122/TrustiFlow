@@ -8,5 +8,9 @@ export async function POST(request: Request) {
   if (token.length < 32 || token.length > 128) return NextResponse.json({ error: 'Liên kết lời mời không hợp lệ.' }, { status: 400 });
   const { data, error } = await supabase.rpc('accept_workspace_invitation', { invite_token: token });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  await supabase.from('audit_events').insert({
+    workspace_id: data, user_id: user.id, entity_type: 'workspace_member', entity_id: user.id,
+    action: 'invitation_accepted', details: { title: 'Thành viên mới đã tham gia workspace', type: 'member', detail: user.email || '' },
+  });
   return NextResponse.json({ ok: true, workspaceId: data });
 }

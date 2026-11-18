@@ -14,5 +14,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ wo
   if (!Object.keys(patch).length) return NextResponse.json({ error: 'Không có thay đổi hợp lệ.' }, { status: 400 });
   const { data, error } = await supabase.from('workspaces').update(patch).eq('id',workspaceId).select('id,name,company_name,tax_id').single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  await supabase.from('audit_events').insert({
+    workspace_id: workspaceId, user_id: user.id, entity_type: 'workspace', entity_id: data.id,
+    action: 'updated', details: { title: `Đã cập nhật workspace: ${data.name}`, type: 'workspace' },
+  });
   return NextResponse.json({ workspace: data });
 }

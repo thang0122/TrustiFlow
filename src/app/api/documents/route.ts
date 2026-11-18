@@ -20,7 +20,7 @@ export async function DELETE(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
   const id = new URL(request.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'Thiếu ID tài liệu.' }, { status: 400 });
-  const { data: document, error: findError } = await supabase.from('documents').select('id,storage_path,workspace_id').eq('id',id).maybeSingle();
+  const { data: document, error: findError } = await supabase.from('documents').select('id,storage_path,workspace_id,file_name').eq('id',id).maybeSingle();
   if (findError || !document) return NextResponse.json({ error: 'Không tìm thấy tài liệu hoặc bạn không có quyền.' }, { status: 404 });
   const { data: versions, error: versionError } = await supabase.from('document_versions')
     .select('storage_path').eq('document_id', id).eq('workspace_id', document.workspace_id);
@@ -30,5 +30,9 @@ export async function DELETE(request: Request) {
   if (storageError) return NextResponse.json({ error: storageError.message }, { status: 400 });
   const { error } = await supabase.from('documents').delete().eq('id',id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  await supabase.from('audit_events').insert({
+    workspace_id: document.workspace_id, user_id: user.id, entity_type: 'document', entity_id: document.id,
+    action: 'deleted', details: { title: `Đã xóa tài liệu: ${document.file_name}`, type: 'document', detail: 'Tài liệu và các phiên bản đã xóa khỏi kho lưu trữ.' }
+  });
   return NextResponse.json({ ok: true });
 }

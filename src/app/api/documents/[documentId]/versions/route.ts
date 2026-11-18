@@ -108,5 +108,9 @@ export async function POST(request: Request, { params }: RouteContext) {
     }).eq('id', documentId).eq('current_version', currentVersion + 1);
     return NextResponse.json({ error: archiveError.message }, { status: 400 });
   }
+  await supabase.from('audit_events').insert({
+    workspace_id: document.workspace_id, user_id: user.id, entity_type: 'document', entity_id: documentId,
+    action: 'version_uploaded', details: { title: `Đã tải phiên bản mới: ${updated.file_name}`, type: 'document', detail: `Phiên bản v${updated.current_version}` }
+  });
   return NextResponse.json({ document: updated }, { status: 201 });
 }

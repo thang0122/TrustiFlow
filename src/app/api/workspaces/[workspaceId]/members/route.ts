@@ -33,6 +33,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const token = randomBytes(32).toString('base64url');
   const { error } = await supabase.from('workspace_invitations').insert({ workspace_id: workspaceId, email, role: parsed.data.role, token, created_by: user.id, expires_at: new Date(Date.now() + 7 * 86400000).toISOString() });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  await supabase.from('audit_events').insert({
+    workspace_id: workspaceId, user_id: user.id, entity_type: 'workspace_invitation', action: 'invited',
+    details: { title: `Đã tạo lời mời cho ${email}`, type: 'member', detail: `Vai trò: ${parsed.data.role}` },
+  });
   return NextResponse.json({ invitation: { email, role: parsed.data.role, url: `${request.nextUrl.origin}/invite/${token}`, expiresInDays: 7 } }, { status: 201 });
 }
 
@@ -52,6 +56,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (own.role === 'admin' && (target.role === 'admin' || parsedRole.data === 'admin')) return NextResponse.json({ error: 'Admin không thể thay đổi vai trò Admin khác hoặc cấp quyền Admin.' }, { status: 403 });
   const { error } = await supabase.from('workspace_members').update({ role: parsedRole.data }).eq('workspace_id', workspaceId).eq('user_id', targetId);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  await supabase.from('audit_events').insert({
+    workspace_id: workspaceId, user_id: user.id, entity_type: 'workspace_member', entity_id: targetId,
+    action: 'role_updated', details: { title: 'Đã cập nhật vai trò thành viên', type: 'member', detail: `Vai trò mới: ${parsedRole.data}` },
+  });
   return NextResponse.json({ ok: true });
 }
 
@@ -67,5 +75,9 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (own.role === 'admin' && target.role === 'admin') return NextResponse.json({ error: 'Admin không thể xóa Admin khác.' }, { status: 403 });
   const { error } = await supabase.from('workspace_members').delete().eq('workspace_id', workspaceId).eq('user_id', targetId);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  await supabase.from('audit_events').insert({
+    workspace_id: workspaceId, user_id: user.id, entity_type: 'workspace_member', entity_id: targetId,
+    action: 'member_removed', details: { title: 'Đã xóa thành viên khỏi workspace', type: 'member' },
+  });
   return NextResponse.json({ ok: true });
 }

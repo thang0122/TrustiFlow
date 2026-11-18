@@ -18,5 +18,9 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ error: 'Tên workspace phải có từ 2 đến 120 ký tự.' }, { status: 400 });
   const { data, error } = await supabase.from('workspaces').insert({ name: parsed.data.name, company_name: parsed.data.company_name || null, tax_id: parsed.data.tax_id || null, created_by: user.id }).select('id,name,company_name,tax_id,created_at').single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  await supabase.from('audit_events').insert({
+    workspace_id: data.id, user_id: user.id, entity_type: 'workspace', entity_id: data.id,
+    action: 'created', details: { title: `Đã tạo workspace: ${data.name}`, type: 'workspace' },
+  });
   return NextResponse.json({ workspace: data }, { status: 201 });
 }

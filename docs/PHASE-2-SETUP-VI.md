@@ -1,62 +1,80 @@
-# TrustiFlow — triển khai Phase 2
+# TrustiFlow — cấu hình và triển khai Giai đoạn 2
 
-Gói này tích hợp xác thực Supabase, hồ sơ, workspace, quyền thành viên được giới hạn theo RLS, lời mời bằng liên kết, nhật ký hoạt động và kho tài liệu riêng tư. Đây là phần nền tảng nghiệp vụ; các màn hình RFQ, báo giá, trích xuất và DEALSHIELD vẫn còn thành phần demo/bản nháp, AI xử lý chứng từ thuộc Phase 3.
+Tài liệu này hướng dẫn thiết lập Supabase, xác thực, workspace, phân quyền, lưu trữ tài liệu, dữ liệu nghiệp vụ và thông báo.
 
-## 1. Cấu hình Environment Variables trên Vercel
+## 1. Biến môi trường Vercel
 
-Trong Vercel → Project → Settings → Environment Variables, thêm cho Production (và Preview/Development nếu sử dụng):
+Mở Vercel → Project → Settings → Environment Variables. Thêm cho Production:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://estabmwikpblktxeddvc.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_lBHa_tVEoUV4Hwg3ISWdSw_pVcSxnEx
 ```
 
-Đây là hai giá trị public/publishable. Không thêm Database password hoặc Supabase Secret key vào trình duyệt, GitHub hay ZIP. Không tạo biến có tiền tố `NEXT_PUBLIC_` cho bất kỳ secret nào. Sau khi lưu biến môi trường, phải redeploy Vercel.
+Đây là URL project và Publishable key đã được cung cấp cho TrustiFlow. Không đưa Database password hoặc Supabase Secret key vào GitHub, ZIP hay trình duyệt. Sau khi lưu biến, phải tạo deployment mới để Next.js nhận cấu hình.
 
-## 2. Chạy SQL migrations theo thứ tự
+## 2. Khởi tạo/phục hồi PostgreSQL và RLS
 
-Mở Supabase Dashboard → SQL Editor → New query.
+Vào Supabase Dashboard → SQL Editor → New query. Mở file trong gói:
 
-1. Chạy toàn bộ `supabase/migrations/202611180001_initial_saas.sql`.
-2. Sau khi migration 001 chạy thành công, chạy tiếp toàn bộ `supabase/migrations/202611180002_phase2_completion.sql`.
-3. Chạy tiếp migration `supabase/migrations/202611180003_document_versions.sql` để bật số phiên bản hiện tại cho tài liệu.
-4. Chạy `supabase/migrations/202611180004_membership_security_hardening.sql` để khóa quyền INSERT trực tiếp và ngăn tự cấp Owner. Migration 004 có thể chạy lại an toàn.
-5. Kiểm tra Table Editor có các bảng: `profiles`, `workspaces`, `workspace_members`, `counterparties`, `products`, `transactions`, `documents`, `document_versions`, `extractions`, `quotations`, `document_reviews`, `discrepancies`, `audit_events`, `workspace_invitations`.
-6. Storage phải có bucket `trade-documents` ở chế độ Private, giới hạn 20 MB/tệp.
+`supabase/SETUP-PHASE2-PRODUCTION.sql`
 
-Nếu trước đó đã chạy migration 001 và 002, không chạy lặp lại hai file đó; chạy migration 003 nếu chưa có cột `current_version`, sau đó chạy migration 004. Nếu đã chạy migration 003 thì chỉ cần chạy migration 004. Nếu migration cũ chạy dở và báo lỗi, dừng lại, không chạy lặp lại toàn bộ một cách tùy tiện. Không chạy riêng `supabase/schema.sql`; file này chỉ dẫn tới bộ migrations chuẩn.
+Sao chép toàn bộ nội dung và chạy một lần trong SQL Editor. Script có tính idempotent: tạo bảng/column còn thiếu, tạo lại policy và trigger do TrustiFlow quản lý, tạo bucket private, cấp quyền cho role `authenticated`, bổ sung hồ sơ cho các tài khoản Auth đã tồn tại và yêu cầu PostgREST tải lại schema cache.
+
+**Không chạy riêng file này đồng thời với các migration 001–005 một cách tùy tiện.** Đây là đường thiết lập thống nhất cho project hiện tại, đặc biệt khi ứng dụng từng báo `Could not find the table 'public.profiles' in the schema cache`.
+
+Sau khi SQL chạy thành công, vào Table Editor kiểm tra các bảng:
+
+- `profiles`
+- `workspaces`
+- `workspace_members`
+- `counterparties`
+- `products`
+- `transactions`
+- `documents`
+- `document_versions`
+- `extractions`
+- `quotations`
+- `document_reviews`
+- `discrepancies`
+- `audit_events`
+- `workspace_invitations`
+- `notifications`
+
+Trong Storage, xác nhận bucket `trade-documents` tồn tại và đang ở chế độ **Private**, giới hạn 20 MB mỗi tệp.
 
 ## 3. Cấu hình Supabase Auth
 
 Supabase Dashboard → Authentication → URL Configuration:
 
-- Site URL: `https://trusti-floww-xxb5.vercel.app` (hoặc domain production hiện đang dùng).
-- Redirect URLs: thêm `https://trusti-floww-xxb5.vercel.app/auth/callback` và `http://localhost:3000/auth/callback`.
-- Nếu domain Vercel thay đổi, thêm callback URL của domain mới.
-- Bật Email confirmation theo chính sách của project. Để gửi email ổn định khi chạy production, cấu hình SMTP riêng trong Supabase Auth; không nên dựa vào giới hạn email mặc định cho người dùng thật.
+- Site URL: `https://trusti-flow.vercel.app`
+- Redirect URL: `https://trusti-flow.vercel.app/auth/callback`
+- Redirect URL local: `http://localhost:3000/auth/callback` (chỉ dùng khi chạy local)
 
-## 4. Chức năng có thể kiểm tra sau khi deploy
+Nếu domain production thay đổi, cập nhật URL theo domain đang sử dụng. Đối với gửi email ổn định cho người dùng, cấu hình SMTP riêng trong Supabase Auth.
 
-1. Mở `https://trusti-floww-xxb5.vercel.app/login` để đăng nhập hoặc đăng ký.
-2. Đăng ký yêu cầu xác nhận email; callback hoàn tất xác thực.
-3. Có chức năng quên mật khẩu và đặt mật khẩu mới.
-4. Sau đăng nhập, API tạo workspace cá nhân nếu tài khoản chưa có workspace. Menu workspace ở thanh bên cho phép chuyển đổi và tạo workspace mới.
-5. Trong Cá nhân & cài đặt, Owner/Admin xem danh sách thành viên, đổi vai trò theo giới hạn quyền, tạo lời mời và sao chép liên kết.
-6. Người được mời phải đăng nhập bằng đúng địa chỉ email được mời; liên kết hết hạn sau 7 ngày. Hiện hệ thống tạo liên kết để người quản trị gửi thủ công, chưa tự gửi email invitation. Membership không cho phép client tự INSERT hoặc tự cấp quyền Owner; lời mời được xác nhận qua RPC kiểm tra email đăng nhập.
-7. Kho tài liệu tải trực tiếp lên Supabase Storage private (PDF, Word, Excel, PNG, JPG, WEBP; tối đa 20 MB/tệp), có lịch sử phiên bản và xóa cả bản cũ khi xóa tài liệu. Tệp chỉ được truy cập trong workspace theo RLS.
-8. Nhật ký hoạt động được ghi vào `audit_events`.
+## 4. Các chức năng trong Giai đoạn 2
 
-## 5. GitHub → Vercel
+1. Đăng ký, xác nhận email, đăng nhập, đăng xuất, quên mật khẩu và cập nhật mật khẩu.
+2. Khôi phục phiên thông qua Supabase SSR cookie và `proxy.ts`.
+3. Tạo workspace cá nhân khi tài khoản Auth chưa có workspace; tạo và chuyển workspace.
+4. Quản lý vai trò Owner/Admin/Member/Reviewer. Owner/Admin có thể quản lý thành viên theo giới hạn quyền.
+5. Mời thành viên bằng liên kết có hạn 7 ngày. Quản trị viên gửi liên kết cho đúng email; người nhận phải đăng nhập bằng email đó để chấp nhận. Liên kết chưa tự gửi email.
+6. Lưu hồ sơ sản phẩm, giao dịch RFQ và báo giá vào PostgreSQL theo workspace.
+7. Nhật ký `audit_events` tạo thông báo cá nhân cho thành viên workspace; người dùng có thể xem danh sách, đánh dấu đã đọc và đánh dấu tất cả đã đọc.
+8. Tài liệu được lưu trong bucket riêng tư; hỗ trợ PDF, Word, Excel, PNG, JPG và WEBP, tối đa 20 MB/tệp; có signed URL, phiên bản và xóa tài liệu.
+9. Các bảng dữ liệu dùng RLS để giới hạn bản ghi theo membership; dữ liệu workspace A không được truy cập từ workspace B.
 
-1. Giải nén ZIP và đưa toàn bộ nội dung ở cấp gốc (package.json, src/, supabase/, proxy.ts) lên repository GitHub mới; không tạo thư mục bọc.
-2. Giữ nguyên `package.json` và `package-lock.json`; không đưa `node_modules`, `.next` hoặc `.env.local` lên GitHub.
-3. Vercel → Deployments: triển khai commit mới. Build command: `npm run build`.
-4. Đặt Root Directory trên Vercel là `./`. Sau deploy, kiểm tra `/login`, đăng ký, email callback, đăng nhập, trang Cá nhân, tạo lời mời và tải thử tệp không nhạy cảm.
+## 5. Triển khai mã nguồn
 
-## 6. Giới hạn và an toàn
+1. Giải nén ZIP và đưa toàn bộ nội dung ở cấp gốc (nơi có `package.json`, `src/`, `supabase/`, `proxy.ts`) lên repository GitHub.
+2. Giữ nguyên cấu trúc thư mục và `package-lock.json`; không đưa `node_modules`, `.next` hoặc `.env.local` lên GitHub.
+3. Vercel Root Directory: `./`; Install Command: `npm ci`; Build Command: `npm run build`.
+4. Deploy commit mới và chờ trạng thái `Ready`.
+5. Kiểm tra `/login`, `/app`, trang Cá nhân & cài đặt, Workspace members, Kho tài liệu, sản phẩm, RFQ, báo giá và thông báo.
 
-- Không có Supabase Secret key trong gói này; các API hoạt động bằng session của người dùng và RLS.
-- Lời mời chưa được gửi email tự động; cần copy link và gửi cho người được mời.
-- Không dùng dữ liệu doanh nghiệp nhạy cảm trước khi hoàn tất kiểm thử RLS giữa hai tài khoản/workspace khác nhau và kiểm tra chính sách lưu trữ/xóa.
-- Phase 2 không bao gồm xử lý Gemini/OCR thật. Các màn hình phân tích RFQ, báo giá và DEALSHIELD còn bản nháp/demo và cần Phase 3 để kết nối dữ liệu nghiệp vụ hoàn chỉnh.
-- Hoàn tất mã nguồn không đồng nghĩa website live đã được nâng cấp: migration Supabase và redeploy Vercel là hai thao tác bắt buộc trước khi xác nhận nghiệm thu.
+## 6. Phạm vi tiếp theo
+
+Giai đoạn 3 bổ sung xử lý tài liệu bằng AI/OCR, trích xuất RFQ và tự động hóa báo giá/email/DEALSHIELD. Giai đoạn 4 tập trung kiểm thử bảo mật, kiểm thử đầu-cuối, quota, backup và khôi phục. Giai đoạn 5 tập trung onboarding, theo dõi vận hành, gói dịch vụ và thương mại hóa.
+
+Việc tạo ZIP không tự chạy SQL trên Supabase hoặc tự triển khai Vercel. Chỉ nghiệm thu production khi script SQL, build, Auth, RLS, Storage và các thao tác đọc/ghi đã được kiểm tra trên project thực tế.
