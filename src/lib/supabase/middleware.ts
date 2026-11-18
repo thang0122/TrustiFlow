@@ -5,7 +5,14 @@ export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-  if (!url || !key) return response;
+  const isPublic = request.nextUrl.pathname === '/' || request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/auth/callback') || request.nextUrl.pathname.startsWith('/auth/update-password') || request.nextUrl.pathname.startsWith('/api/health') || request.nextUrl.pathname.startsWith('/_next') || request.nextUrl.pathname === '/manifest.webmanifest' || request.nextUrl.pathname === '/sw.js' || request.nextUrl.pathname.startsWith('/icons');
+  if (!url || !key) {
+    if (isPublic) return response;
+    const target = request.nextUrl.clone();
+    target.pathname = '/login';
+    target.searchParams.set('next', request.nextUrl.pathname);
+    return NextResponse.redirect(target);
+  }
   const supabase = createServerClient(url, key, {
     cookies: {
       getAll: () => request.cookies.getAll(),
@@ -17,16 +24,15 @@ export async function updateSession(request: NextRequest) {
     },
   });
   const { data: { user } } = await supabase.auth.getUser();
-  const isPublic = request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/auth/callback') || request.nextUrl.pathname.startsWith('/auth/update-password') || request.nextUrl.pathname.startsWith('/api/health') || request.nextUrl.pathname.startsWith('/_next') || request.nextUrl.pathname === '/manifest.webmanifest' || request.nextUrl.pathname === '/sw.js' || request.nextUrl.pathname.startsWith('/icons');
   if (!user && !isPublic) {
     const target = request.nextUrl.clone();
     target.pathname = '/login';
     target.searchParams.set('next', request.nextUrl.pathname);
     return NextResponse.redirect(target);
   }
-  if (user && request.nextUrl.pathname === '/login') {
+  if (user && (request.nextUrl.pathname === '/login' || request.nextUrl.pathname === '/')) {
     const target = request.nextUrl.clone();
-    target.pathname = '/';
+    target.pathname = '/app';
     target.search = '';
     return NextResponse.redirect(target);
   }

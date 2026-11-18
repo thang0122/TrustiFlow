@@ -4,8 +4,8 @@ import { FormEvent, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, Sparkles } from 'lucide-react';
 
-export function LoginForm({ nextPath = '/', callbackError = '' }: { nextPath?: string; callbackError?: string }) {
-  const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>('login');
+export function LoginForm({ nextPath = '/app', callbackError = '', initialMode = 'login' }: { nextPath?: string; callbackError?: string; initialMode?: 'login' | 'signup' }) {
+  const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>(initialMode);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
