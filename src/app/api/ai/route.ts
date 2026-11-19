@@ -6,7 +6,7 @@ import { extractPlainText, getMimeType } from '@/lib/documents/archive-text';
 import { isDocumentAiConfigured, runDocumentAiOcr } from '@/lib/ocr/document-ai';
 
 export const runtime = 'nodejs';
-export const maxDuration = 300;
+export const maxDuration = 60;
 const MAX_FILES = 4;
 const MAX_TOTAL_BYTES = 3 * 1024 * 1024;
 const MAX_SINGLE_BYTES = 3 * 1024 * 1024;
@@ -90,11 +90,24 @@ export async function POST(request:Request) {
   const contentType = request.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
     const body = await request.json().catch(()=>null);
-    if (!body || body.mode !== 'email' || typeof body.prompt !== 'string' || body.prompt.trim().length < 10) return NextResponse.json({error:'Yêu cầu soạn email không hợp lệ.'},{status:400});
+    if (!body || body.mode !== 'email' || typeof body.prompt !== 'string' || body.prompt.trim().length < 10 || !/^[0-9a-f-]{36}$/i.test(String(body.workspaceId || ''))) return NextResponse.json({error:'Yêu cầu soạn email hoặc workspace không hợp lệ.'},{status:400});
     try {
+      await assertWorkspaceMember(supabase,String(body.workspaceId),user.id);
       const prompt = `You draft business correspondence for export SMEs. Write a useful editable email in the requested language and tone. Use only facts supplied by the user. Do not invent names, quotations, quantities, prices, payment status, shipment dates, attachments, commitments, or legal statements. Use [placeholder] for any missing fact necessary for a complete email. Include a subject line. Do not claim an email was sent.\n\n${body.prompt.slice(0,12000)}`;
       const result = await generateWithGemini(prompt,false);
-      return NextResponse.json({ok:true,mode:'email',model:result.model,output:result.text});
+      const {error:archiveError} = await supabase.from('audit_events').insert({
+        workspace_id:String(body.workspaceId),user_id:user.id,entity_type:'trade_email',action:'drafted',
+        details:{
+          title:'Đã soạn email thương mại',type:'email',detail:`${result.model} · bản nháp chưa gửi`,
+          status:'Completed',result:{kind:'trade_email',subject:(result.text.match(/^Subject:\s*(.+)$/im)?.[1] || ''),body:result.text,output:result.text,model:result.model,prompt:body.prompt.slice(0,12000)},
+          result_version:1,document_ids:[],
+        },
+      });
+      if (archiveError) return NextResponse.json({
+        error:`Đã tạo email nhưng chưa lưu được kết quả vào lịch sử: ${archiveError.message}`,
+        archivePayload:{title:'Đã soạn email thương mại',type:'email',detail:`${result.model} · bản nháp chưa gửi`,result:{kind:'trade_email',subject:(result.text.match(/^Subject:\s*(.+)$/im)?.[1] || ''),body:result.text,output:result.text,model:result.model,prompt:body.prompt.slice(0,12000)}},
+      },{status:503});
+      return NextResponse.json({ok:true,mode:'email',model:result.model,output:result.text,resultSaved:true});
     } catch(error) { return NextResponse.json({error:error instanceof Error ? error.message : 'Không thể tạo email.'},{status:502}); }
   }
   const form = await request.formData();
@@ -158,12 +171,25 @@ export async function POST(request:Request) {
       }
       await supabase.from('documents').update({processing_status:'completed',document_type:'review_source'}).in('id',docs.map(d=>d.id));
       for (const doc of docs) await supabase.from('extractions').insert({workspace_id:workspaceId,document_id:doc.id,extraction_type:'dealshield_source',model:ai.model,extracted_data:{document_name:doc.name},confidence:{source_text_extracted:true},status:'needs_review',created_by:user.id});
-      await supabase.from('audit_events').insert({workspace_id:workspaceId,user_id:user.id,entity_type:'document_review',entity_id:reviewRow.id,action:'created',details:{title:'DEALSHIELD đã rà soát chứng từ',type:'review',detail:`${docs.length} tài liệu · ${rows.length} điểm cần xem xét`}});
       const reviewForUi = {...review,
         discrepancies:validatedDiscrepancies.map((item,index)=>({...item,id:savedRows[index]?.id || null,verification_status:'pending'})),
         limitations:[...(Array.isArray(review.limitations) ? review.limitations : []), ...(rejectedEvidenceCount ? [`${rejectedEvidenceCount} cảnh báo không được lưu vì trích dẫn không khớp chính xác với hai tài liệu nguồn.`] : [])],
       };
-      return NextResponse.json({ok:true,mode:'review',model:ai.model,structured:reviewForUi,reviewId:reviewRow.id,documents:docs.map(d=>({id:d.id,name:d.name,ocrProvider:d.ocrProvider,pages:d.pages})),output:JSON.stringify(reviewForUi)});
+      const reviewDocuments = docs.map(d=>({id:d.id,name:d.name,mimeType:d.type,ocrProvider:d.ocrProvider,pages:d.pages}));
+      const {error:archiveError} = await supabase.from('audit_events').insert({
+        workspace_id:workspaceId,user_id:user.id,entity_type:'document_review',entity_id:reviewRow.id,action:'created',
+        details:{
+          title:'DEALSHIELD đã rà soát chứng từ',type:'review',
+          detail:`${docs.length} tài liệu · ${rows.length} điểm cần xem xét`,status:'Completed',
+          result:{kind:'dealshield_review',reviewId:reviewRow.id,review:reviewForUi,documents:reviewDocuments,discrepancyIds:savedRows.map(row=>row.id),model:ai.model},
+          result_version:1,document_ids:docs.map(d=>d.id),related_object_id:reviewRow.id,
+        },
+      });
+      if (archiveError) return NextResponse.json({
+        error:`Đã rà soát nhưng chưa lưu được kết quả vào lịch sử: ${archiveError.message}`,
+        archivePayload:{title:'DEALSHIELD đã rà soát chứng từ',type:'review',detail:`${docs.length} tài liệu · ${rows.length} điểm cần xem xét`,entityId:reviewRow.id,relatedObjectId:reviewRow.id,documentIds:docs.map(d=>d.id),result:{kind:'dealshield_review',reviewId:reviewRow.id,review:reviewForUi,documents:reviewDocuments,discrepancyIds:savedRows.map(row=>row.id),model:ai.model}},
+      },{status:503});
+      return NextResponse.json({ok:true,mode:'review',model:ai.model,structured:reviewForUi,reviewId:reviewRow.id,documents:reviewDocuments,output:JSON.stringify(reviewForUi),resultSaved:true});
     }
     const outputDocs = [];
     for (const doc of docs) {
@@ -193,8 +219,21 @@ export async function POST(request:Request) {
       await supabase.from('documents').update({processing_status:'needs_review',document_type:String(structured.document_type || (mode === 'rfq' ? 'rfq' : 'trade_document'))}).eq('id',doc.id);
       outputDocs.push({documentId:doc.id,documentName:doc.name,extractionId:extraction.id,structured:safeData,ocrProvider:doc.ocrProvider,pages:doc.pages,model:ai.model});
     }
-    await supabase.from('audit_events').insert({workspace_id:workspaceId,user_id:user.id,entity_type:'document',entity_id:docs[0].id,action:'extracted',details:{title:mode === 'rfq' ? 'Đã trích xuất RFQ' : 'Đã phân tích chứng từ',type:'document',detail:`${docs.length} tài liệu · cần người dùng xác nhận`}});
-    return NextResponse.json({ok:true,mode,model:getGeminiModel(),documents:outputDocs,structured:outputDocs[0]?.structured,extractionId:outputDocs[0]?.extractionId,output:JSON.stringify(outputDocs[0]?.structured || {})});
+    const archiveType = mode === 'rfq' ? 'rfq' : 'document';
+    const archiveTitle = mode === 'rfq' ? 'Đã trích xuất RFQ' : 'Đã phân tích chứng từ';
+    const {error:archiveError} = await supabase.from('audit_events').insert({
+      workspace_id:workspaceId,user_id:user.id,entity_type:archiveType,entity_id:docs[0].id,action:'extracted',
+      details:{
+        title:archiveTitle,type:archiveType,detail:`${docs.length} tài liệu · cần người dùng xác nhận`,status:'Needs review',
+        result:{kind:mode === 'rfq' ? 'rfq_extraction' : 'document_extraction',documents:outputDocs,structured:outputDocs[0]?.structured,model:getGeminiModel()},
+        result_version:1,document_ids:docs.map(d=>d.id),related_object_id:docs[0].id,
+      },
+    });
+    if (archiveError) return NextResponse.json({
+      error:`Đã trích xuất nhưng chưa lưu được kết quả vào lịch sử: ${archiveError.message}`,
+      archivePayload:{title:archiveTitle,type:archiveType,detail:`${docs.length} tài liệu · cần người dùng xác nhận`,entityId:docs[0].id,relatedObjectId:docs[0].id,documentIds:docs.map(d=>d.id),result:{kind:mode === 'rfq' ? 'rfq_extraction' : 'document_extraction',documents:outputDocs,structured:outputDocs[0]?.structured,model:getGeminiModel()}},
+    },{status:503});
+    return NextResponse.json({ok:true,mode,model:getGeminiModel(),documents:outputDocs,structured:outputDocs[0]?.structured,extractionId:outputDocs[0]?.extractionId,output:JSON.stringify(outputDocs[0]?.structured || {}),resultSaved:true});
   } catch(error) {
     if (docs.length) {
       for (const doc of docs) {

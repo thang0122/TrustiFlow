@@ -37,11 +37,20 @@ export async function POST(request: Request) {
     created_by: user.id,
   }).select('id,workspace_id,name,hs_code,description,unit,origin_country,sku,created_at,updated_at').single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  await supabase.from('audit_events').insert({
+  const { error: auditError } = await supabase.from('audit_events').insert({
     workspace_id: workspaceId, user_id: user.id, entity_type: 'product', entity_id: data.id,
-    action: 'created', details: { title: `Đã tạo hồ sơ sản phẩm: ${data.name}`, type: 'product', detail: data.hs_code || 'Hồ sơ sản phẩm' },
+    action: 'created', details: {
+      title: `Đã tạo hồ sơ sản phẩm: ${data.name}`, type: 'product',
+      detail: data.hs_code || 'Hồ sơ sản phẩm', status: 'Completed',
+      result: { kind: 'product_profile', product: data }, result_version: 1,
+      related_object_id: data.id, document_ids: [],
+    },
   });
-  return NextResponse.json({ product: data }, { status: 201 });
+  if (auditError) return NextResponse.json({
+    error: `Hồ sơ đã tạo nhưng chưa lưu được kết quả vào lịch sử: ${auditError.message}`, product: data, resultSaved: false,
+    archivePayload: { title: `Đã tạo hồ sơ sản phẩm: ${data.name}`, type: 'product', detail: data.hs_code || 'Hồ sơ sản phẩm', entityId: data.id, relatedObjectId: data.id, result: { kind: 'product_profile', product: data } },
+  }, { status: 503 });
+  return NextResponse.json({ product: data, resultSaved: true }, { status: 201 });
 }
 
 
@@ -62,11 +71,19 @@ export async function PATCH(request: Request) {
   }).eq('id', id).select('id,workspace_id,name,hs_code,description,unit,origin_country,sku,created_at,updated_at').maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   if (!data) return NextResponse.json({ error: 'Không tìm thấy hồ sơ hoặc bạn không có quyền cập nhật.' }, { status: 404 });
-  await supabase.from('audit_events').insert({
+  const { error: auditError } = await supabase.from('audit_events').insert({
     workspace_id: data.workspace_id, user_id: user.id, entity_type: 'product', entity_id: data.id,
-    action: 'updated', details: { title: `Đã cập nhật hồ sơ sản phẩm: ${data.name}`, type: 'product' },
+    action: 'updated', details: {
+      title: `Đã cập nhật hồ sơ sản phẩm: ${data.name}`, type: 'product', status: 'Completed',
+      result: { kind: 'product_profile', product: data }, result_version: 1,
+      related_object_id: data.id, document_ids: [],
+    },
   });
-  return NextResponse.json({ product: data });
+  if (auditError) return NextResponse.json({
+    error: `Hồ sơ đã cập nhật nhưng chưa lưu được kết quả vào lịch sử: ${auditError.message}`,
+    archivePayload: { title: `Đã cập nhật hồ sơ sản phẩm: ${data.name}`, type: 'product', detail: data.hs_code || 'Hồ sơ sản phẩm', entityId: data.id, relatedObjectId: data.id, result: { kind: 'product_profile', product: data } },
+  }, { status: 503 });
+  return NextResponse.json({ product: data, resultSaved: true });
 }
 
 export async function DELETE(request: Request) {

@@ -67,7 +67,18 @@ export async function POST(request:Request) {
       return NextResponse.json({error:`Không lưu được các khoản chi phí, báo giá chưa được lưu: ${costError.message}`},{status:400});
     }
   }
-  const {error:auditError} = await supabase.from('audit_events').insert({workspace_id:workspaceId,user_id:user.id,entity_type:'quotation',entity_id:quotation.id,action:'created',details:{title:`Đã tạo báo giá: ${quotation.product}`,type:'quotation',detail:`${quantity} ${fields.unit || ''} · ${quoteTotal} ${fields.currency} · đã xác nhận bảng chi phí`}});
-  if (auditError) return NextResponse.json({quotation,warning:`Báo giá đã lưu nhưng nhật ký chưa ghi được: ${auditError.message}`},{status:201});
-  return NextResponse.json({quotation,calculation:breakdown},{status:201});
+  const archiveResult = { kind:'quotation', quotation, calculation:breakdown, costLines:cost_lines };
+  const {error:auditError} = await supabase.from('audit_events').insert({
+    workspace_id:workspaceId,user_id:user.id,entity_type:'quotation',entity_id:quotation.id,action:'created',
+    details:{
+      title:`Đã tạo báo giá: ${quotation.product}`,type:'quotation',
+      detail:`${quantity} ${fields.unit || ''} · ${quoteTotal} ${fields.currency} · đã xác nhận bảng chi phí`,
+      status:'Completed',result:archiveResult,result_version:1,related_object_id:quotation.id,document_ids:[],
+    },
+  });
+  if (auditError) return NextResponse.json({
+    error:`Báo giá đã lưu nhưng chưa lưu được kết quả vào lịch sử: ${auditError.message}`,quotation,resultSaved:false,
+    archivePayload:{title:`Đã tạo báo giá: ${quotation.product}`,type:'quotation',detail:`${quantity} ${fields.unit || ''} · ${quoteTotal} ${fields.currency} · đã xác nhận bảng chi phí`,entityId:quotation.id,relatedObjectId:quotation.id,result:archiveResult},
+  },{status:503});
+  return NextResponse.json({quotation,calculation:breakdown,resultSaved:true},{status:201});
 }

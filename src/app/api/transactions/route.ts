@@ -66,13 +66,18 @@ export async function POST(request: Request) {
   }).select('id,workspace_id,reference_code,buyer_name,counterparty_id,product_id,status,incoterm,destination,metadata,created_at').single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   const { error: auditError } = await supabase.from('audit_events').insert({
-    workspace_id: workspaceId,
-    user_id: user.id,
-    entity_type: 'transaction',
-    entity_id: data.id,
+    workspace_id: workspaceId, user_id: user.id, entity_type: 'transaction', entity_id: data.id,
     action: 'rfq_received',
-    details: { title: `Đã tiếp nhận RFQ${reference_code ? ` ${reference_code}` : ''}`, type: 'transaction', detail: `${buyer_name} · ${product_name} · ${quantity} ${unit}` },
+    details: {
+      title: `Đã tiếp nhận RFQ${reference_code ? ` ${reference_code}` : ''}`, type: 'transaction',
+      detail: `${buyer_name} · ${product_name} · ${quantity} ${unit}`, status: 'Completed',
+      result: { kind: 'rfq_transaction', transaction: data, supplied_fields: { buyer_name, product_name, quantity, unit, destination, incoterm, delivery, payment_terms, notes } },
+      result_version: 1, related_object_id: data.id, document_ids: [],
+    },
   });
-  if (auditError) return NextResponse.json({ transaction: data, warning: `Giao dịch đã lưu nhưng chưa ghi được nhật ký: ${auditError.message}` }, { status: 201 });
-  return NextResponse.json({ transaction: data }, { status: 201 });
+  if (auditError) return NextResponse.json({
+    error: `Giao dịch đã lưu nhưng chưa lưu được kết quả vào lịch sử: ${auditError.message}`, transaction: data, resultSaved: false,
+    archivePayload: { title: `Đã tiếp nhận RFQ${reference_code ? ` ${reference_code}` : ''}`, type: 'transaction', detail: `${buyer_name} · ${product_name} · ${quantity} ${unit}`, entityId: data.id, relatedObjectId: data.id, result: { kind: 'rfq_transaction', transaction: data, supplied_fields: { buyer_name, product_name, quantity, unit, destination, incoterm, delivery, payment_terms, notes } } },
+  }, { status: 503 });
+  return NextResponse.json({ transaction: data, resultSaved: true }, { status: 201 });
 }
