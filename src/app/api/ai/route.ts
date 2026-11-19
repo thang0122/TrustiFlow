@@ -126,7 +126,7 @@ export async function POST(request:Request) {
       if (reviewError || !reviewRow) throw new Error(`Không lưu được kết quả rà soát: ${reviewError?.message || 'Unknown error'}`);
       const docA = docs[0]; const docB = docs[1];
       const proposedDiscrepancies = Array.isArray(review.discrepancies) ? review.discrepancies : [];
-      const validatedDiscrepancies = proposedDiscrepancies.flatMap(item => {
+      const validatedDiscrepancies: Array<Record<string, unknown>> = proposedDiscrepancies.flatMap((item): Array<Record<string, unknown>> => {
         const leftName = String(item.document_a || ''); const rightName = String(item.document_b || '');
         const leftDoc = docs.find(d => d.name === leftName);
         const rightDoc = docs.find(d => d.name === rightName);
