@@ -6,7 +6,7 @@ import { extractPlainText, getMimeType } from '@/lib/documents/archive-text';
 import { isDocumentAiConfigured, runDocumentAiOcr } from '@/lib/ocr/document-ai';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 300;
 const MAX_FILES = 4;
 const MAX_TOTAL_BYTES = 3 * 1024 * 1024;
 const MAX_SINGLE_BYTES = 3 * 1024 * 1024;
