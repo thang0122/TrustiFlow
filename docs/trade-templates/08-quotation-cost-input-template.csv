@@ -1,0 +1,11 @@
+Cost item,Category,Amount,Currency,Basis,Source / evidence,User confirmed
+[Product cost per unit],product, , ,per_unit,[Supplier quotation / costing sheet],No
+[Add only if applicable],packaging, , ,per_unit,[Source],No
+[Add only if applicable],inland_transport, , ,per_shipment,[Forwarder quotation],No
+[Add only if applicable],freight, , ,per_shipment,[Carrier / forwarder quote],No
+[Add only if applicable],insurance, , ,per_shipment,[Insurance quote],No
+[Add only if applicable],customs, , ,per_shipment,[Broker invoice / tariff assessment],No
+[Add only if applicable],tax, , ,per_shipment,[Official assessment / accountant],No
+[Add only if applicable],inspection, , ,per_shipment,[Inspection quote],No
+[Add only if applicable],bank, , ,per_shipment,[Bank tariff],No
+[Add only if applicable],other, , ,per_shipment,[Source],No

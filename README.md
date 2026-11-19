@@ -1,60 +1,66 @@
-# TrustiFlow — Giai đoạn 2: Backend và dữ liệu
+# TrustiFlow — mã nguồn Phase 2 + Phase 3
 
-Mã nguồn Next.js của TrustiFlow được đặt trực tiếp ở cấp gốc của gói, không lồng trong thư mục dự án khác.
+Ứng dụng Next.js + TypeScript, Supabase Auth/PostgreSQL/Storage và Google Gemini. Mã nguồn nằm trực tiếp ở cấp gốc ZIP; khi đưa lên GitHub, upload nội dung thư mục gốc, không bọc thêm một thư mục dự án khác.
 
-## Thành phần đã triển khai trong mã nguồn
+## Phase 3 đã được bổ sung trong mã nguồn
 
-- Supabase SSR client cho trình duyệt và máy chủ; `proxy.ts` làm mới phiên và bảo vệ các route cần đăng nhập.
-- Supabase Auth: đăng ký, đăng nhập, đăng xuất, xác nhận email, quên mật khẩu và cập nhật mật khẩu.
-- API hồ sơ người dùng; tự tạo workspace đầu tiên; tạo và chuyển workspace.
-- Phân quyền Owner, Admin, Member, Reviewer; quản lý thành viên; lời mời bằng liên kết có thời hạn; kiểm soát quyền ở API và Row Level Security (RLS).
-- Supabase Storage riêng tư: kiểm tra MIME/dung lượng, tải lên, tải xuống bằng signed URL, lưu phiên bản và xóa tài liệu.
-- PostgreSQL cho hồ sơ người dùng, workspace, thành viên, đối tác, sản phẩm, giao dịch, tài liệu, phiên bản, extraction, báo giá, rà soát, sai lệch, audit, lời mời và thông báo.
-- CRUD hồ sơ sản phẩm, tiếp nhận RFQ thành giao dịch và lưu báo giá vào workspace.
-- Nhật ký hoạt động và danh sách thông báo theo người dùng/workspace.
-- Giao diện tài khoản, menu hồ sơ/cài đặt/đăng xuất, thông báo và trạng thái kết nối.
+- **Document Reader:** nhận PDF, DOCX, XLSX, CSV, TXT, MD và ảnh PNG/JPG/WEBP; DOCX/XLSX/CSV/TXT xử lý văn bản ở máy chủ; PDF/ảnh dùng Google Cloud Document AI OCR; Gemini phân loại và trích xuất trường dữ liệu, nguồn trích dẫn, thông tin thiếu và lưu trạng thái chờ xác nhận.
+- **RFQ Extraction:** trích xuất các trường RFQ, tách từng dòng hàng, đưa dữ liệu đã được người dùng xác nhận sang biểu mẫu RFQ để kiểm tra và lưu giao dịch.
+- **Product profiles:** tiếp tục dùng hồ sơ sản phẩm trong workspace; luồng RFQ và báo giá đối chiếu tên sản phẩm trong cùng workspace để liên kết khi có bản ghi phù hợp.
+- **Quotation Assistant:** người dùng tự nhập chi phí sản phẩm/đơn vị, các khoản phụ trợ, cách tính theo đơn vị/theo lô, đồng tiền và tỷ lệ cộng biên. Máy chủ tính lại bằng công thức cố định; không thêm mặc định thuế, phí hải quan, cước, bảo hiểm hoặc chi phí chưa nhập. Cần checkbox xác nhận trước khi lưu.
+- **Trade Communication:** tạo bản nháp email thương mại theo mục đích, ngôn ngữ và giọng điệu; không gửi email tự động.
+- **DEALSHIELD:** so sánh từ hai chứng từ trở lên, đưa ra sai lệch và bước xác minh đề xuất; người dùng chọn xác minh hoặc loại bỏ cảnh báo.
+- Giữ Supabase Storage private, extraction, discrepancy, quotation cost breakdown và audit event trong workspace.
 
-## Cấu hình môi trường
+## Cấu hình và triển khai
 
-Tạo `.env.local` tại thư mục có `package.json` khi chạy local. Dùng `.env.example` làm mẫu.
+### 1. Chuẩn bị Supabase
 
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://estabmwikpblktxeddvc.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=YOUR_SUPABASE_PUBLISHABLE_KEY
-GEMINI_API_KEY=
-GEMINI_MODEL=gemini-2.5-flash
-```
+Phase 2 đã có các migration/bootstrap riêng. Bạn đã chạy SQL Phase 2 trước đây nên **không chạy lại** chúng. Sau khi đưa mã nguồn Phase 3 lên GitHub, mở Supabase SQL Editor và chỉ chạy một lần tệp:
 
-Không đưa `.env.local`, Database password hoặc Supabase Secret key lên GitHub. Chỉ Publishable key được phép sử dụng ở phía trình duyệt; dữ liệu phải luôn được bảo vệ bằng RLS.
+`supabase/migrations/202611180006_phase3_workflows.sql`
 
-## Cài đặt và kiểm tra mã nguồn
+### 2. Cấu hình Vercel
 
-```bash
-npm ci
-npm run build
-npm run dev
-```
+Trong Vercel → project `trusti-flow` → Settings → Environment Variables, cấu hình:
 
-## Thiết lập PostgreSQL/Supabase
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `GEMINI_API_KEY` (server-only)
+- `GEMINI_MODEL=gemini-2.5-flash`
+- `DOCUMENT_AI_PROJECT_ID`
+- `DOCUMENT_AI_LOCATION` (phải khớp vị trí processor, ví dụ `asia-southeast1`)
+- `DOCUMENT_AI_PROCESSOR_ID`
+- `DOCUMENT_AI_SERVICE_ACCOUNT_JSON_BASE64` (server-only)
 
-Với project Supabase hiện tại, mở SQL Editor và chạy **một lần** toàn bộ file `supabase/SETUP-PHASE2-PRODUCTION.sql`. Đây là script bootstrap/phục hồi độc lập, có thể chạy trên database chưa có bảng `profiles` hoặc trên database đã có một phần các bảng Phase 2. Script chỉ thay thế các policy mang tên TrustiFlow, không xóa policy không liên quan của project.
+Không gửi Gemini key/service-account JSON vào chat hoặc GitHub. Không thêm tiền tố `NEXT_PUBLIC_` cho khóa bí mật. Hướng dẫn từng bước và kiểm tra sau deploy nằm trong `docs/PHASE-3-SETUP-VI.md`.
 
-Sau khi chạy thành công, kiểm tra các bảng trong Table Editor, bucket `trade-documents` ở chế độ Private và tải lại schema cache. Chi tiết tại `docs/PHASE-2-SETUP-VI.md`.
+### 3. Đưa lên GitHub và Vercel
 
-## Triển khai Vercel
+1. Giải nén ZIP.
+2. Upload toàn bộ nội dung cấp gốc vào repository (thấy ngay `package.json`, `src/`, `supabase/`, `proxy.ts`).
+3. Giữ Vercel Root Directory là `./`.
+4. Build command: `npm run build` (Install command: `npm ci`).
+5. Cấu hình environment variables, Redeploy và kiểm tra `/api/health`, `/api/ai`.
+6. Thử một file không nhạy cảm trước khi tải chứng từ thật.
 
-- Root Directory: `./`
-- Install Command: `npm ci`
-- Build Command: `npm run build`
-- Environment Variables: `NEXT_PUBLIC_SUPABASE_URL` và `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` cho Production.
-- Sau khi thay biến môi trường hoặc cập nhật mã nguồn, tạo deployment mới.
+## Mẫu nghiệp vụ
 
-Cấu hình Site URL và Redirect URLs trong Supabase Authentication theo domain production thực tế, ví dụ `https://trusti-flow.vercel.app/auth/callback`.
+`docs/trade-templates/` gồm RFQ, Pro Forma Invoice, PO, hợp đồng, Commercial Invoice, Packing List, checklist vận tải/chứng từ, bảng nhập chi phí CSV và email mẫu. `docs/sample-documents/` chứa RFQ, PO, Commercial Invoice và Packing List với dữ liệu giả lập để thử DEALSHIELD. Các mẫu này là khung tham khảo, không phải chứng từ pháp định; không dùng dữ liệu giả lập cho giao dịch.
 
-## Ranh giới các giai đoạn
+Nguồn nghiệp vụ được liệt kê ở `docs/trade-templates/00-README.md`, gồm hướng dẫn Trade.gov về common export documents, mẫu quotations/pro forma invoices, checklist Trade Commissioner Service Canada, Vietnam National Trade Repository và Incoterms® 2020 của ICC. Yêu cầu thực tế phải kiểm tra theo hàng hóa, tuyến, quốc gia và giao dịch cụ thể.
 
-Giai đoạn 2 tập trung vào tài khoản, workspace, phân quyền, cơ sở dữ liệu, lưu trữ tài liệu, CRUD dữ liệu nền tảng và nhật ký hoạt động. Phân tích tài liệu bằng AI/OCR, trích xuất RFQ tự động, luồng DEALSHIELD tự động và tự động hóa email thuộc Giai đoạn 3. Kiểm thử bảo mật, độ tin cậy, backup và phục hồi thuộc Giai đoạn 4; thương mại hóa thuộc Giai đoạn 5.
+## Giới hạn hiện tại — cần biết trước khi đưa vào quy trình thật
 
-## Tình trạng nghiệm thu
+- Mỗi lượt AI nhận tối đa 4 tệp và tổng dung lượng 3 MB; `.doc` và `.xls` cũ chưa hỗ trợ, hãy chuyển thành `.docx`/`.xlsx`.
+- PDF/ảnh cần Document AI được cấu hình; OCR đồng bộ chịu giới hạn theo processor (tài liệu hướng dẫn hiện giới hạn 15 trang cho OCR processor online). Pipeline batch cho tài liệu dài chưa có.
+- Gemini 2.5 Flash được giữ làm model mặc định theo lựa chọn của bạn. Google hiện giới hạn quyền truy cập 2.5 cho những project đã sử dụng trước đó; model 2.5 chưa có ngày shutdown được công bố. Nếu key/project không gọi được, kiểm tra quyền trong AI Studio và đổi `GEMINI_MODEL` sang `gemini-3.8-flash` nếu model này được cấp cho project.
+- AI trích dẫn nguồn để người dùng đối chiếu; không coi kết quả là xác nhận pháp lý, kiểm chứng chữ ký/con dấu, xác thực người thụ hưởng hoặc tài khoản ngân hàng.
+- Email là bản nháp; không gửi tự động.
+- Báo giá chỉ tính các mục đã nhập, cùng đồng tiền báo giá. Công thức cộng biên trên tổng chi phí, không phải margin trên doanh thu. Chưa có tính năng chuyển đổi tiền tệ.
 
-Gói mã nguồn không thể tự chạy SQL trên project Supabase hoặc tự triển khai lên Vercel. Chỉ xác nhận Giai đoạn 2 hoàn thành trên Production sau khi script SQL đã chạy thành công, deployment build `Ready`, Auth/Workspace/RLS/Storage được kiểm tra bằng các tài khoản riêng biệt và các thao tác ghi/đọc dữ liệu hoạt động thực tế.
+## Xác minh và nghiệm thu
+
+Kiểm tra tĩnh TypeScript/TSX và unit test của bộ tính báo giá/parser được ghi trong `BUILD-VERIFICATION.md`. Không có `node_modules` trong môi trường đóng gói này, vì vậy chưa chạy được `npm ci`, `npm run build` hoặc test API live trên Gemini/Document AI/Supabase. Không coi việc tạo ZIP là xác nhận deployment thành công.
+
+Sau khi cấu hình API và migration, thực hiện checklist kiểm thử kết hợp Phase 2 + Phase 3 trong `docs/PHASE-3-SETUP-VI.md`. Các phần Phase 2 như session persistence, ma trận role, tenant isolation, invitations và vòng đời file vẫn cần nghiệm thu trên production cùng Phase 3 như bạn yêu cầu.
